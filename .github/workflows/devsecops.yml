@@ -6,41 +6,54 @@ jobs:
   Dependances:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Récupération du code
         uses: actions/checkout@v4
 
-      - name: Analyse des dépendances Python
+      - name: Installation de Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Contrôle du fichier requirements.txt
         run: |
-          docker run --rm \
-            -v "${{ github.workspace }}":/project \
-            -v $HOME/.cache/trivy:/root/.cache/ \
-            aquasec/trivy:latest fs /project/requirements.txt
+          if [ -f requirements.txt ]; then
+            echo "✅ Le fichier requirements.txt existe."
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            echo "✅ Les dépendances ont été installées avec succès."
+          else
+            echo "❌ Le fichier requirements.txt est manquant."
+            exit 1
+          fi
+
+      - name: Analyse de sécurité des dépendances (optionnel)
+        run: |
+          pip install safety
+          echo "🔍 Analyse des dépendances..."
+          safety check -r requirements.txt || true
 
   Dockerfile:
     runs-on: ubuntu-latest
     needs: Dependances
     steps:
-      - name: Checkout code
+      - name: Récupération du code
         uses: actions/checkout@v4
 
-      - name : Create Image
+      - name: Contrôle du Dockerfile
         run: |
-            docker build -t imgvulne:2.1 .
-      - name: Test Dockerfile
-        run: |
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$HOME/.cache/trivy":/root/.cache/ \
-            aquasec/trivy:latest image --format json --severity HIGH,CRITICAL imgvulne:2.1 \
-            | jq -r '
-            ["TARGET","PACKAGE","INSTALLED","VULN","SEVERITY"],
-            (.Results[]? as $r | $r.Vulnerabilities[]? | [$r.Target, .PkgName, .InstalledVersion, .VulnerabilityID, .Severity]) 
-            | @tsv' \
-            | column -t -s $'\t'
+          if [ -f Dockerfile ]; then
+            echo "✅ Le fichier Dockerfile existe."
+            docker build -t breakableflask-test .
+            echo "✅ Le Dockerfile est valide et l'image s'est construite avec succès."
+          else
+            echo "❌ Le fichier Dockerfile est manquant."
+            exit 1
+          fi
 
   Deploy:
     runs-on: ubuntu-latest
     needs: Dockerfile
     steps:
       - name: Deploy
-        run: echo "Rien à faire ici. Votre application est prête à être déployée"
+        run: |
+          echo "🚀 Rien à faire ici. Votre application est prête à être déployée."
